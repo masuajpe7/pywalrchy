@@ -50,11 +50,13 @@ class Theme:
         if self.meta_file.exists():
             meta = tomllib.loads(self.meta_file.read_text())
             monitors = meta.get("monitors", {})
-            self.monitor_wallpapers = [
-                MonitorWallpaper(monitor=m, path=self.path / p)
-                for m, p in monitors.items()
-                if (self.path / p).exists()
-            ]
+            for m, val in monitors.items():
+                # val is a string for named monitors, a list for "unassigned"
+                paths = val if isinstance(val, list) else [val]
+                for p in paths:
+                    full = self.path / p
+                    if full.exists():
+                        self.monitor_wallpapers.append(MonitorWallpaper(monitor=m, path=full))
         # Fall back to scanning backgrounds/ when no pywalrchy metadata exists
         if not self.monitor_wallpapers and self.backgrounds_dir.exists():
             _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
@@ -72,10 +74,21 @@ class Theme:
         self.colors_file.write_text("\n".join(lines) + "\n")
 
     def save_meta(self) -> None:
-        lines = ["[monitors]"]
+        # Group by monitor — "unassigned" may appear multiple times, which
+        # would produce duplicate TOML keys. Store those as an array instead.
+        from collections import defaultdict
+        grouped: dict[str, list[str]] = defaultdict(list)
         for mw in self.monitor_wallpapers:
-            rel = mw.path.relative_to(self.path)
-            lines.append(f'"{mw.monitor}" = "{rel}"')
+            rel = str(mw.path.relative_to(self.path))
+            grouped[mw.monitor].append(rel)
+
+        lines = ["[monitors]"]
+        for monitor, paths in grouped.items():
+            if len(paths) == 1:
+                lines.append(f'"{monitor}" = "{paths[0]}"')
+            else:
+                arr = ", ".join(f'"{p}"' for p in paths)
+                lines.append(f'"{monitor}" = [{arr}]')
         self.meta_file.write_text("\n".join(lines) + "\n")
 
     def add_wallpaper(self, src: Path, monitor: str) -> Path:
