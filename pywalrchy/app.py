@@ -27,12 +27,21 @@ from textual.widgets import (
     Static,
 )
 
+from textual.theme import Theme as TextualTheme
+
 from pywalrchy import __version__
 from pywalrchy.config import COLOR_KEYS, COLOR_LABELS
 from pywalrchy.hyprpaper import apply_wallpapers, get_monitors
 from pywalrchy import omarchy as omarchy_mod
 from pywalrchy import pywal
-from pywalrchy.theme import MonitorWallpaper, Theme, active_theme_name, create_theme, list_themes
+from pywalrchy.theme import (
+    MonitorWallpaper,
+    Theme,
+    active_theme_name,
+    create_theme,
+    list_themes,
+    load_current_colors,
+)
 
 
 # ── Wallpaper row widget ───────────────────────────────────────────────────────
@@ -169,6 +178,52 @@ def _fg_for(hex_color: str) -> str:
         return "#000000" if luma > 128 else "#ffffff"
     except Exception:
         return "#ffffff"
+
+
+def _lighten(hex_color: str, amount: float) -> str:
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    r = min(255, int(r + (255 - r) * amount))
+    g = min(255, int(g + (255 - g) * amount))
+    b = min(255, int(b + (255 - b) * amount))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def build_textual_theme(colors: dict[str, str]) -> TextualTheme:
+    bg  = colors.get("background", "#1e1e2e")
+    fg  = colors.get("foreground", "#cdd6f4")
+    acc = colors.get("accent",     "#89b4fa")
+    c1  = colors.get("color1",     "#f38ba8")
+    c2  = colors.get("color2",     "#a6e3a1")
+    c3  = colors.get("color3",     "#f9e2af")
+    c4  = colors.get("color4",     "#89b4fa")
+    c5  = colors.get("color5",     "#f5c2e7")
+
+    # Determine light vs dark from background luminosity
+    try:
+        bc = Color.parse(bg)
+        luma = 0.299 * bc.r + 0.587 * bc.g + 0.114 * bc.b
+        dark = luma < 128
+    except Exception:
+        dark = True
+
+    surface = _lighten(bg, 0.06)
+    panel   = _lighten(bg, 0.10)
+
+    return TextualTheme(
+        name="omarchy",
+        primary=acc,
+        secondary=c5,
+        accent=acc,
+        foreground=fg,
+        background=bg,
+        surface=surface,
+        panel=panel,
+        success=c2,
+        warning=c3,
+        error=c1,
+        dark=dark,
+    )
 
 
 # ── Terminal preview widget ────────────────────────────────────────────────────
@@ -993,4 +1048,8 @@ class PywalrchyApp(App):
     """
 
     def on_mount(self) -> None:
+        colors = load_current_colors()
+        if colors:
+            self.register_theme(build_textual_theme(colors))
+            self.theme = "omarchy"
         self.push_screen(ThemeBrowserScreen())

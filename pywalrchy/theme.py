@@ -134,6 +134,14 @@ def active_theme_name() -> str | None:
     return None
 
 
+def load_current_colors() -> dict[str, str]:
+    """Return the colors of the currently active Omarchy theme."""
+    colors_file = OMARCHY_CURRENT / "theme" / "colors.toml"
+    if colors_file.exists():
+        return _parse_colors_toml(colors_file.read_text())
+    return {}
+
+
 def create_theme(name: str) -> Theme:
     slug = name.lower().replace(" ", "-")
     path = OMARCHY_THEMES / slug
