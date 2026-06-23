@@ -9,7 +9,7 @@ from pywalrchy.config import COLOR_KEYS, WAL_CACHE
 
 def extract_colors(image: Path) -> dict[str, str]:
     subprocess.run(
-        ["wal", "-i", str(image), "--nowal", "-q"],
+        ["wal", "-i", str(image), "-n", "-q"],
         check=True,
     )
     return parse_wal_cache()
