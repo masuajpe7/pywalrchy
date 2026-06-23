@@ -16,6 +16,7 @@ from textual.screen import ModalScreen, Screen
 from textual.widget import Widget
 from textual.widgets import (
     Button,
+    DirectoryTree,
     Footer,
     Header,
     Input,
@@ -58,6 +59,98 @@ class WallpaperRow(Horizontal):
         btn = Button("Open", classes="btn-open-wp", variant="default")
         btn.data = self._mw.path  # type: ignore[attr-defined]
         yield btn
+
+
+# ── File browser ──────────────────────────────────────────────────────────────
+
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp"}
+_PICTURES_DIR = Path.home() / "Pictures"
+_BROWSE_START = _PICTURES_DIR if _PICTURES_DIR.exists() else Path.home()
+
+
+class ImageDirectoryTree(DirectoryTree):
+    """DirectoryTree that shows only directories and image files."""
+
+    def filter_paths(self, paths):
+        return [
+            p for p in paths
+            if p.is_dir() or p.suffix.lower() in _IMAGE_EXTS
+        ]
+
+
+class FileBrowserScreen(ModalScreen):
+    """Full-screen file browser for picking a wallpaper image."""
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    DEFAULT_CSS = """
+    FileBrowserScreen {
+        align: center middle;
+    }
+    FileBrowserScreen #fb-dialog {
+        width: 80%;
+        height: 80%;
+        border: thick $accent;
+        background: $surface;
+    }
+    FileBrowserScreen #fb-hint {
+        padding: 0 1;
+        color: $text-muted;
+        height: 1;
+    }
+    FileBrowserScreen ImageDirectoryTree {
+        height: 1fr;
+    }
+    FileBrowserScreen #fb-selected {
+        height: 2;
+        padding: 0 1;
+        color: $accent;
+        border-top: solid $surface-darken-2;
+    }
+    FileBrowserScreen #fb-buttons {
+        height: 3;
+        align: right middle;
+        padding: 0 1;
+        border-top: solid $surface-darken-2;
+    }
+    """
+
+    def __init__(self, start: Path = _BROWSE_START, **kwargs):
+        super().__init__(**kwargs)
+        self._start = start
+        self._chosen: Path | None = None
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="fb-dialog"):
+            yield Label(
+                "Navigate to an image file and press [bold]Enter[/] to select it.",
+                id="fb-hint",
+            )
+            yield ImageDirectoryTree(self._start, id="fb-tree")
+            yield Label("No file selected", id="fb-selected")
+            with Horizontal(id="fb-buttons"):
+                yield Button("Select", id="fb-ok", variant="primary", disabled=True)
+                yield Button("Cancel", id="fb-cancel")
+
+    @on(DirectoryTree.FileSelected)
+    def file_highlighted(self, event: DirectoryTree.FileSelected) -> None:
+        path = event.path
+        if path.suffix.lower() in _IMAGE_EXTS:
+            self._chosen = path
+            self.query_one("#fb-selected", Label).update(str(path))
+            self.query_one("#fb-ok", Button).disabled = False
+        else:
+            self._chosen = None
+            self.query_one("#fb-selected", Label).update("[dim]Not an image file[/]")
+            self.query_one("#fb-ok", Button).disabled = True
+
+    @on(Button.Pressed, "#fb-ok")
+    def confirm(self) -> None:
+        self.dismiss(self._chosen)
+
+    @on(Button.Pressed, "#fb-cancel")
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -409,6 +502,7 @@ class ThemeEditorScreen(Screen):
                         id="monitor-select", prompt="Monitor",
                     )
                     yield Input(placeholder="Path to image", id="wp-path-input")
+                    yield Button("Browse…", id="btn-browse-editor", variant="default")
                     yield Button("Add", id="btn-add-wp", variant="primary")
         yield Footer()
 
@@ -433,6 +527,14 @@ class ThemeEditorScreen(Screen):
     @on(PaletteEditor.ColorsChanged)
     def colors_updated(self, event: PaletteEditor.ColorsChanged) -> None:
         self._colors = event.colors
+
+    @on(Button.Pressed, "#btn-browse-editor")
+    def browse_editor(self) -> None:
+        def _on_pick(path: Path | None) -> None:
+            if path:
+                self.query_one("#wp-path-input", Input).value = str(path)
+
+        self.app.push_screen(FileBrowserScreen(), callback=_on_pick)
 
     @on(Button.Pressed, "#btn-add-wp")
     def add_wallpaper(self) -> None:
@@ -529,7 +631,8 @@ class WizardScreen(Screen):
             self._refresh_assignments(assignments_box)
             body.mount(Select([(m, m) for m in self._monitors], id="monitor-sel", prompt="Monitor"))
             body.mount(Input(placeholder="Path to image file", id="wp-input"))
-            body.mount(Button("Add", id="btn-add-wp", variant="success"))
+            body.mount(Button("Browse…", id="btn-browse-wizard", variant="default"))
+            body.mount(Button("Add ↵", id="btn-add-wp", variant="success"))
 
         elif self._step == 3:
             self.query_one("#btn-next", Button).label = "Next →"
@@ -562,6 +665,17 @@ class WizardScreen(Screen):
             return
         for monitor, path in self._assignments.items():
             container.mount(Label(f"  [bold]{monitor}[/] → {path.name}"))
+
+    @on(Button.Pressed, "#btn-browse-wizard")
+    def browse_wizard(self) -> None:
+        def _on_pick(path: Path | None) -> None:
+            if path:
+                try:
+                    self.query_one("#wp-input", Input).value = str(path)
+                except Exception:
+                    pass
+
+        self.app.push_screen(FileBrowserScreen(), callback=_on_pick)
 
     @on(Button.Pressed, "#btn-add-wp")
     def add_assignment(self) -> None:
