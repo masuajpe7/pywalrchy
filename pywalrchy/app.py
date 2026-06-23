@@ -269,13 +269,13 @@ class PaletteEditor(Widget):
 
     def __init__(self, colors: dict[str, str], **kwargs):
         super().__init__(**kwargs)
-        self.colors = dict(colors)
+        self._data = dict(colors)
         self._editing_key: str | None = None
 
     def compose(self) -> ComposeResult:
         with Container(classes="palette-grid"):
             for key in COLOR_KEYS:
-                yield ColorSwatch(key=key, hex_color=self.colors.get(key, "#000000"), id=f"swatch-{key}")
+                yield ColorSwatch(key=key, hex_color=self._data.get(key, "#000000"), id=f"swatch-{key}")
         with Horizontal(classes="edit-row", id="edit-row"):
             yield Label("", id="edit-label")
             yield Input(placeholder="#rrggbb", id="color-input")
@@ -288,7 +288,7 @@ class PaletteEditor(Widget):
         self.query_one("#edit-row").add_class("visible")
         self.query_one("#edit-label", Label).update(f"{COLOR_LABELS.get(event.key, event.key)}: ")
         inp = self.query_one("#color-input", Input)
-        inp.value = self.colors.get(event.key, "#000000")
+        inp.value = self._data.get(event.key, "#000000")
         inp.focus()
 
     @on(Button.Pressed, "#btn-set")
@@ -305,11 +305,11 @@ class PaletteEditor(Widget):
             return
         inp.remove_class("error")
         value = value.lower()
-        self.colors[self._editing_key] = value
+        self._data[self._editing_key] = value
         self.query_one(f"#swatch-{self._editing_key}", ColorSwatch).update_color(value)
         self._editing_key = None
         self.query_one("#edit-row").remove_class("visible")
-        self.post_message(self.ColorsChanged(dict(self.colors)))
+        self.post_message(self.ColorsChanged(dict(self._data)))
 
     @on(Button.Pressed, "#btn-cancel")
     def cancel_edit(self) -> None:
@@ -317,7 +317,7 @@ class PaletteEditor(Widget):
         self.query_one("#edit-row").remove_class("visible")
 
     def reload(self, colors: dict[str, str]) -> None:
-        self.colors = dict(colors)
+        self._data = dict(colors)
         for key in COLOR_KEYS:
             try:
                 self.query_one(f"#swatch-{key}", ColorSwatch).update_color(colors.get(key, "#000000"))
@@ -599,7 +599,7 @@ class WizardScreen(Screen):
             self._extract_colors()
         elif self._step == 3:
             try:
-                self._colors = dict(self.query_one("#palette", PaletteEditor).colors)
+                self._colors = dict(self.query_one("#palette", PaletteEditor)._data)
             except Exception:
                 pass
             self._step = 4
