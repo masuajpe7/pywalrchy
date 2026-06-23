@@ -53,7 +53,16 @@ class Theme:
             self.monitor_wallpapers = [
                 MonitorWallpaper(monitor=m, path=self.path / p)
                 for m, p in monitors.items()
+                if (self.path / p).exists()
             ]
+        # Fall back to scanning backgrounds/ when no pywalrchy metadata exists
+        if not self.monitor_wallpapers and self.backgrounds_dir.exists():
+            _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
+            for f in sorted(self.backgrounds_dir.iterdir()):
+                if f.is_file() and f.suffix.lower() in _IMAGE_EXTS:
+                    self.monitor_wallpapers.append(
+                        MonitorWallpaper(monitor="unassigned", path=f)
+                    )
 
     def save_colors(self) -> None:
         lines = []
