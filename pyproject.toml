@@ -6,11 +6,19 @@ build-backend = "setuptools.build_meta"
 name = "pywalrchy"
 version = "0.1.0"
 description = "Wallpaper-driven theme manager for Omarchy"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.11"
-dependencies = ["textual>=0.80"]
+dependencies = [
+    "textual>=8.0",
+]
 
 [project.scripts]
 pywalrchy = "pywalrchy.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/maxiciber/pywalrchy"
+Issues = "https://github.com/maxiciber/pywalrchy/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
