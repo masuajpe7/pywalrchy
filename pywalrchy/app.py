@@ -31,7 +31,33 @@ from pywalrchy.config import COLOR_KEYS, COLOR_LABELS
 from pywalrchy.hyprpaper import apply_wallpapers, get_monitors
 from pywalrchy import omarchy as omarchy_mod
 from pywalrchy import pywal
-from pywalrchy.theme import Theme, MonitorWallpaper, active_theme_name, create_theme, list_themes
+from pywalrchy.theme import MonitorWallpaper, Theme, active_theme_name, create_theme, list_themes
+
+
+# ── Wallpaper row widget ───────────────────────────────────────────────────────
+
+class WallpaperRow(Horizontal):
+    """A single wallpaper entry: monitor label + Open button, composed properly."""
+
+    DEFAULT_CSS = """
+    WallpaperRow { height: 2; align: left middle; }
+    WallpaperRow Label { width: 1fr; }
+    """
+
+    def __init__(self, mw: MonitorWallpaper, **kwargs):
+        super().__init__(**kwargs)
+        self._mw = mw
+
+    def compose(self) -> ComposeResult:
+        tag = (
+            f"[dim]{self._mw.monitor}[/]"
+            if self._mw.monitor == "unassigned"
+            else f"[bold]{self._mw.monitor}[/]"
+        )
+        yield Label(f"{tag}  {self._mw.path.name}")
+        btn = Button("Open", classes="btn-open-wp", variant="default")
+        btn.data = self._mw.path  # type: ignore[attr-defined]
+        yield btn
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -355,10 +381,6 @@ class ThemeEditorScreen(Screen):
     ThemeEditorScreen .panel-title {
         text-style: bold; color: $accent; margin-bottom: 1;
     }
-    ThemeEditorScreen .wallpaper-row {
-        height: 2; padding: 0 1; align: left middle;
-    }
-    ThemeEditorScreen .wallpaper-row Label { width: 1fr; }
     ThemeEditorScreen #add-row { height: 3; margin-top: 1; }
     ThemeEditorScreen #monitor-select { width: 20; }
     ThemeEditorScreen #wp-info-editor { height: 5; padding: 0 1; color: $text-muted; }
@@ -400,12 +422,7 @@ class ThemeEditorScreen(Screen):
             container.mount(Label("[dim]No wallpapers assigned yet.[/]"))
             return
         for mw in self.theme.monitor_wallpapers:
-            row = Horizontal(classes="wallpaper-row")
-            lbl = Label(f"[bold]{mw.monitor}[/]  {mw.path.name}")
-            btn = Button("Open", classes="btn-open-wp", variant="default")
-            btn.data = mw.path  # type: ignore[attr-defined]
-            row.mount(lbl, btn)
-            container.mount(row)
+            container.mount(WallpaperRow(mw))
 
     @on(Button.Pressed, ".btn-open-wp")
     def open_wallpaper(self, event: Button.Pressed) -> None:
@@ -672,11 +689,6 @@ class ThemeBrowserScreen(Screen):
         color: $accent;
         margin-bottom: 1;
     }
-    ThemeBrowserScreen .wallpaper-row {
-        height: 2;
-        align: left middle;
-    }
-    ThemeBrowserScreen .wallpaper-row Label { width: 1fr; }
     ThemeBrowserScreen #wp-info {
         height: 5;
         padding: 0 1;
@@ -761,13 +773,7 @@ class ThemeBrowserScreen(Screen):
         wp_section.remove_children()
         if theme.monitor_wallpapers:
             for mw in theme.monitor_wallpapers:
-                row = Horizontal(classes="wallpaper-row")
-                tag = f"[dim]{mw.monitor}[/]" if mw.monitor == "unassigned" else f"[bold]{mw.monitor}[/]"
-                lbl = Label(f"{tag}  {mw.path.name}")
-                btn = Button("Open", classes="btn-open-wp", variant="default")
-                btn.data = mw.path  # type: ignore[attr-defined]
-                row.mount(lbl, btn)
-                wp_section.mount(row)
+                wp_section.mount(WallpaperRow(mw))
         else:
             wp_section.mount(Label("[dim]No wallpapers[/]"))
 
