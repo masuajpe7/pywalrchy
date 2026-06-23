@@ -4,7 +4,7 @@ A terminal UI for creating and managing [Omarchy](https://omarchy.org/) themes p
 
 Upload a wallpaper → pywal extracts a color palette → a full Omarchy theme is created. Supports per-monitor wallpapers via [hyprpaper](https://github.com/hyprwm/hyprpaper).
 
-![screenshot placeholder]
+![pywalrchy screenshot](assets/screenshot.png)
 
 ## Features
 
