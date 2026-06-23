@@ -30,7 +30,7 @@ from textual.widgets import (
 from textual.theme import Theme as TextualTheme
 
 from pywalrchy import __version__
-from pywalrchy.config import COLOR_KEYS, COLOR_LABELS
+from pywalrchy.config import COLOR_KEYS, COLOR_LABELS, OMARCHY_THEMES
 from pywalrchy.hyprpaper import apply_wallpapers, get_monitors
 from pywalrchy import omarchy as omarchy_mod
 from pywalrchy import pywal
@@ -68,6 +68,82 @@ class WallpaperRow(Horizontal):
         btn = Button("Open", classes="btn-open-wp", variant="default")
         btn.data = self._mw.path  # type: ignore[attr-defined]
         yield btn
+
+
+# ── Wallpaper editor row ──────────────────────────────────────────────────────
+
+class WallpaperEditorRow(Widget):
+    """Wallpaper row for the theme editor: monitor select + filename + browse + remove."""
+
+    DEFAULT_CSS = """
+    WallpaperEditorRow {
+        layout: horizontal;
+        height: 3;
+        align: left middle;
+        padding: 0 1;
+        margin-bottom: 1;
+        border: round $surface-darken-2;
+    }
+    WallpaperEditorRow Select { width: 20; }
+    WallpaperEditorRow .wp-name {
+        width: 1fr;
+        padding: 0 1;
+        content-align: left middle;
+        color: $text-muted;
+    }
+    """
+
+    class BrowseRequested(Message):
+        def __init__(self, row: "WallpaperEditorRow") -> None:
+            self.row = row
+            super().__init__()
+
+    class Removed(Message):
+        def __init__(self, row: "WallpaperEditorRow") -> None:
+            self.row = row
+            super().__init__()
+
+    def __init__(self, mw: MonitorWallpaper, monitors: list[str], **kwargs):
+        super().__init__(**kwargs)
+        self._mw = mw
+        self._monitors = monitors
+
+    @property
+    def current_monitor(self) -> str:
+        try:
+            val = self.query_one(Select).value
+            return str(val) if val is not Select.BLANK else self._mw.monitor
+        except Exception:
+            return self._mw.monitor
+
+    @property
+    def current_path(self) -> Path:
+        return self._mw.path
+
+    def update_path(self, path: Path) -> None:
+        self._mw = MonitorWallpaper(monitor=self._mw.monitor, path=path)
+        try:
+            self.query_one(".wp-name", Label).update(path.name)
+        except Exception:
+            pass
+
+    def compose(self) -> ComposeResult:
+        opts = [(m, m) for m in self._monitors]
+        cur = self._mw.monitor
+        if cur not in self._monitors:
+            opts.insert(0, (cur, cur))
+        yield Select(opts, value=cur, allow_blank=False)
+        yield Label(self._mw.path.name, classes="wp-name")
+        yield Button("Browse…", classes="btn-row-browse", variant="default")
+        yield Button("✕", classes="btn-row-remove", variant="error")
+
+    @on(Button.Pressed, ".btn-row-browse")
+    def _request_browse(self) -> None:
+        self.post_message(self.BrowseRequested(self))
+
+    @on(Button.Pressed, ".btn-row-remove")
+    def _request_remove(self) -> None:
+        self.post_message(self.Removed(self))
 
 
 # ── File browser ──────────────────────────────────────────────────────────────
@@ -529,9 +605,11 @@ class ThemeEditorScreen(Screen):
     ThemeEditorScreen .panel-title {
         text-style: bold; color: $accent; margin-bottom: 1;
     }
-    ThemeEditorScreen #add-row { height: 3; margin-top: 1; }
+    ThemeEditorScreen #wallpaper-list { height: 1fr; }
+    ThemeEditorScreen #add-section { height: auto; margin-top: 1; }
+    ThemeEditorScreen #add-row { height: 3; }
     ThemeEditorScreen #monitor-select { width: 20; }
-    ThemeEditorScreen #wp-info-editor { height: 5; padding: 0 1; color: $text-muted; }
+    ThemeEditorScreen #wp-path-input { width: 1fr; }
     """
 
     def __init__(self, theme: Theme, **kwargs):
@@ -548,17 +626,17 @@ class ThemeEditorScreen(Screen):
                 yield PaletteEditor(self._colors, id="palette")
             with Vertical(id="right-panel"):
                 yield Label("Wallpapers per monitor", classes="panel-title")
-                yield Static("", id="wp-info-editor")
                 yield ScrollableContainer(id="wallpaper-list")
-                yield Label("Add wallpaper:", classes="panel-title")
-                with Horizontal(id="add-row"):
-                    yield Select(
-                        [(m, m) for m in self._monitors],
-                        id="monitor-select", prompt="Monitor",
-                    )
-                    yield Input(placeholder="Path to image", id="wp-path-input")
-                    yield Button("Browse…", id="btn-browse-editor", variant="default")
-                    yield Button("Add", id="btn-add-wp", variant="primary")
+                with Vertical(id="add-section"):
+                    yield Label("Add wallpaper:", classes="panel-title")
+                    with Horizontal(id="add-row"):
+                        yield Select(
+                            [(m, m) for m in self._monitors],
+                            id="monitor-select", prompt="Monitor",
+                        )
+                        yield Input(placeholder="Path to image", id="wp-path-input")
+                        yield Button("Browse…", id="btn-browse-editor", variant="default")
+                        yield Button("Add", id="btn-add-wp", variant="primary")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -571,20 +649,31 @@ class ThemeEditorScreen(Screen):
             container.mount(Label("[dim]No wallpapers assigned yet.[/]"))
             return
         for mw in self.theme.monitor_wallpapers:
-            container.mount(WallpaperRow(mw))
+            container.mount(WallpaperEditorRow(mw, self._monitors))
 
-    @on(Button.Pressed, ".btn-open-wp")
-    def open_wallpaper(self, event: Button.Pressed) -> None:
-        path = getattr(event.button, "data", None)
-        if path:
-            open_in_viewer(path)
+    @on(WallpaperEditorRow.BrowseRequested)
+    def browse_row(self, event: WallpaperEditorRow.BrowseRequested) -> None:
+        row = event.row
+
+        def _on_pick(path: Path | None) -> None:
+            if path:
+                row.update_path(path)
+
+        self.app.push_screen(FileBrowserScreen(), callback=_on_pick)
+
+    @on(WallpaperEditorRow.Removed)
+    def remove_row(self, event: WallpaperEditorRow.Removed) -> None:
+        event.row.remove()
+        remaining = list(self.query(WallpaperEditorRow))
+        if not remaining:
+            self.query_one("#wallpaper-list").mount(Label("[dim]No wallpapers assigned yet.[/]"))
 
     @on(PaletteEditor.ColorsChanged)
     def colors_updated(self, event: PaletteEditor.ColorsChanged) -> None:
         self._colors = event.colors
 
     @on(Button.Pressed, "#btn-browse-editor")
-    def browse_editor(self) -> None:
+    def browse_add_input(self) -> None:
         def _on_pick(path: Path | None) -> None:
             if path:
                 self.query_one("#wp-path-input", Input).value = str(path)
@@ -610,6 +699,20 @@ class ThemeEditorScreen(Screen):
     def action_save(self) -> None:
         self.theme.colors = self._colors
         self.theme.save_colors()
+        # Persist wallpaper assignments from current rows
+        self.theme.backgrounds_dir.mkdir(exist_ok=True)
+        new_wallpapers: list[MonitorWallpaper] = []
+        for row in self.query(WallpaperEditorRow):
+            monitor = row.current_monitor
+            src = row.current_path
+            if not src.exists():
+                continue
+            if src.parent != self.theme.backgrounds_dir:
+                dest = self.theme.backgrounds_dir / f"{monitor}{src.suffix}"
+                shutil.copy2(src, dest)
+                src = dest
+            new_wallpapers.append(MonitorWallpaper(monitor=monitor, path=src))
+        self.theme.monitor_wallpapers = new_wallpapers
         self.theme.save_meta()
         self.notify("Theme saved.")
 
@@ -991,9 +1094,24 @@ class ThemeBrowserScreen(Screen):
         if theme is None:
             return
         if theme.is_stock:
-            self.notify("Stock themes are read-only. Create a new theme to customise.", severity="warning")
-            return
+            theme = self._fork_stock_theme(theme)
         self.app.push_screen(ThemeEditorScreen(theme), callback=self._on_return)
+
+    def _fork_stock_theme(self, stock: Theme) -> Theme:
+        dest = OMARCHY_THEMES / stock.name
+        dest.mkdir(parents=True, exist_ok=True)
+        if stock.colors_file.exists():
+            shutil.copy2(stock.colors_file, dest / "colors.toml")
+        dest_bg = dest / "backgrounds"
+        dest_bg.mkdir(exist_ok=True)
+        if stock.backgrounds_dir.exists():
+            for f in stock.backgrounds_dir.iterdir():
+                if f.is_file():
+                    shutil.copy2(f, dest_bg / f.name)
+        user_theme = Theme(name=stock.name, path=dest, is_stock=False)
+        user_theme.load()
+        self.notify(f"Forked '{stock.name}' to your themes — changes won't be lost on updates.")
+        return user_theme
 
     @work(thread=True)
     def action_apply_theme(self) -> None:
