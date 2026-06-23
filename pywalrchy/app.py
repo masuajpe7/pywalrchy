@@ -73,24 +73,30 @@ class WallpaperRow(Horizontal):
 # ── Wallpaper editor row ──────────────────────────────────────────────────────
 
 class WallpaperEditorRow(Widget):
-    """Wallpaper row for the theme editor: monitor select + filename + browse + remove."""
+    """Wallpaper row for the theme editor — two rows: filename on top, controls below."""
 
     DEFAULT_CSS = """
     WallpaperEditorRow {
+        layout: vertical;
+        height: auto;
+        border: round $surface-darken-2;
+        margin-bottom: 1;
+        padding: 0 1;
+    }
+    WallpaperEditorRow .wp-filename {
+        height: 2;
+        content-align: left middle;
+        text-style: bold;
+        padding: 0 1;
+    }
+    WallpaperEditorRow .wp-controls {
         layout: horizontal;
         height: 3;
         align: left middle;
-        padding: 0 1;
-        margin-bottom: 1;
-        border: round $surface-darken-2;
     }
-    WallpaperEditorRow Select { width: 20; }
-    WallpaperEditorRow .wp-name {
-        width: 1fr;
-        padding: 0 1;
-        content-align: left middle;
-        color: $text-muted;
-    }
+    WallpaperEditorRow .wp-controls Select { width: 22; }
+    WallpaperEditorRow .btn-row-browse { width: 10; margin-left: 1; }
+    WallpaperEditorRow .btn-row-remove { width: 10; margin-left: 1; }
     """
 
     class BrowseRequested(Message):
@@ -123,19 +129,20 @@ class WallpaperEditorRow(Widget):
     def update_path(self, path: Path) -> None:
         self._mw = MonitorWallpaper(monitor=self._mw.monitor, path=path)
         try:
-            self.query_one(".wp-name", Label).update(path.name)
+            self.query_one(".wp-filename", Label).update(path.name)
         except Exception:
             pass
 
     def compose(self) -> ComposeResult:
-        opts = [(m, m) for m in self._monitors]
-        cur = self._mw.monitor
-        if cur not in self._monitors:
-            opts.insert(0, (cur, cur))
-        yield Select(opts, value=cur, allow_blank=False)
-        yield Label(self._mw.path.name, classes="wp-name")
-        yield Button("Browse…", classes="btn-row-browse", variant="default")
-        yield Button("✕", classes="btn-row-remove", variant="error")
+        yield Label(self._mw.path.name, classes="wp-filename")
+        with Horizontal(classes="wp-controls"):
+            opts = [(m, m) for m in self._monitors]
+            cur = self._mw.monitor
+            if cur not in self._monitors:
+                opts.insert(0, (cur, cur))
+            yield Select(opts, value=cur, allow_blank=False)
+            yield Button("Browse", classes="btn-row-browse", variant="default")
+            yield Button("Remove", classes="btn-row-remove", variant="error")
 
     @on(Button.Pressed, ".btn-row-browse")
     def _request_browse(self) -> None:
