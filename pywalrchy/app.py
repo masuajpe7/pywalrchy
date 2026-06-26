@@ -982,6 +982,9 @@ class ThemeBrowserScreen(Screen):
         height: auto;
         padding: 1;
     }
+    ThemeBrowserScreen #wallpaper-section {
+        height: auto;
+    }
     ThemeBrowserScreen .mini-swatch {
         height: 3;
         content-align: center middle;
@@ -1023,8 +1026,11 @@ class ThemeBrowserScreen(Screen):
             marker = " ●" if theme.name == active else ""
             stock = " [dim][stock][/]" if theme.is_stock else ""
             lv.append(ListItem(Label(f"{theme.name}{marker}{stock}")))
+        # Use call_after_refresh so the ListView has finished its own layout
+        # pass before we try to update the detail panel. Direct calls here
+        # race with the ListView.Highlighted events fired by lv.append().
         if self._themes:
-            self._show_detail(0)
+            self.call_after_refresh(self._show_detail, 0)
 
     @on(ListView.Highlighted)
     def list_highlighted(self, event: ListView.Highlighted) -> None:
